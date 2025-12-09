@@ -286,6 +286,36 @@ textarea {
   font-weight: 700;
 }
 
+.conversation-topic {
+  background-color: var(--surface);
+  border: 1px solid var(--surface-light);
+  border-radius: 10px;
+  padding: 1rem 1.2rem;
+  margin-bottom: 1.2rem;
+}
+
+.topic-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 0.6rem;
+  color: var(--text-secondary);
+}
+
+.topic-header i {
+  color: var(--primary);
+  font-size: 1.2rem;
+}
+
+.topic-subtitle {
+  font-size: 0.85rem;
+}
+
+.topic-text {
+  line-height: 1.6;
+  color: var(--text);
+}
+
 .response-card {
   background-color: var(--surface);
   border-radius: 12px;
