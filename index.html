@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LinguaDuo – Juego diario en pareja</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <div class="logo-circle">LD</div>
+      <div>
+        <h1>LinguaDuo</h1>
+        <p class="subtitle">Un minijuego diario para mezclar italiano y español en pareja.</p>
+      </div>
+    </header>
+
+    <main class="app-main">
+      <!-- Configuración de pareja -->
+      <section class="card" id="setup-card">
+        <h2>Configurar pareja</h2>
+        <p class="section-description">
+          Escribe cómo quieres que os llame la app. Esto se guarda en este dispositivo.
+        </p>
+
+        <form id="setup-form" class="setup-form">
+          <div class="field-group">
+            <label for="you-name">Tu nombre</label>
+            <input type="text" id="you-name" name="you-name" placeholder="Ej. Andrea" required>
+          </div>
+
+          <div class="field-group">
+            <label for="partner-name">Nombre de tu pareja</label>
+            <input type="text" id="partner-name" name="partner-name" placeholder="Ej. María" required>
+          </div>
+
+          <div class="field-group">
+            <label for="active-player">¿Quién está usando ahora la app?</label>
+            <select id="active-player" name="active-player">
+              <option value="you">Yo</option>
+              <option value="partner">Mi pareja</option>
+            </select>
+          </div>
+
+          <button type="submit" class="btn primary">Guardar y ver misión de hoy</button>
+        </form>
+      </section>
+
+      <!-- Misión diaria -->
+      <section class="card hidden" id="mission-card">
+        <header class="card-header">
+          <div>
+            <p class="day-label" id="day-label"></p>
+            <h2 id="mission-title">Misión de hoy</h2>
+          </div>
+          <span class="pill" id="mission-type-pill">Tipo</span>
+        </header>
+
+        <p class="section-description" id="mission-description">
+          Carga de misión...
+        </p>
+
+        <div id="mission-content" class="mission-content">
+          <!-- Aquí se inyecta el contenido dinámico del minijuego -->
+        </div>
+
+        <div class="mission-actions">
+          <button id="save-response-btn" class="btn primary">Guardar respuesta</button>
+          <button id="clear-response-btn" class="btn ghost">Borrar respuesta de hoy</button>
+        </div>
+
+        <div class="mission-status" id="mission-status">
+          <!-- Estado (guardado, pendiente, etc.) -->
+        </div>
+      </section>
+
+      <!-- Historial muy simple -->
+      <section class="card" id="history-card">
+        <h2>Últimos días</h2>
+        <p class="section-description">
+          Resumen rápido de los últimos 7 días en este dispositivo.
+        </p>
+
+        <ul class="history-list" id="history-list">
+          <!-- Se rellena desde JS -->
+        </ul>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <p>LinguaDuo · Prototipo local sin servidor · Pensado para parejas italiano–español ❤️</p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
