@@ -64,6 +64,16 @@ const state = {
 
 const SESSION_KEY = 'parlaconmigo-session';
 
+function registerServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker
+        .register('/service-worker.js')
+        .catch((error) => console.error('No se pudo registrar el Service Worker', error));
+    });
+  }
+}
+
 const conversationTopics = [
   { prompt: 'Parlate del vostro piatto italiano preferito. Quali ingredienti vi piacciono di più?' },
   { prompt: 'Raccontate un ricordo di vacanza in Italia o un posto dove vi piacerebbe andare.' },
@@ -615,3 +625,5 @@ async function init() {
 document.addEventListener('DOMContentLoaded', () => {
   init();
 });
+
+registerServiceWorker();
