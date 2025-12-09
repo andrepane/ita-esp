@@ -22,6 +22,12 @@ const DOM = {
   languageToggle: document.getElementById('languageToggle'),
 };
 
+const appState = {
+  mission: null,
+  response: '',
+  correction: null,
+};
+
 const state = {
   user: null,
   coupleCode: null,
@@ -75,9 +81,50 @@ function showLoading(show) {
   DOM.loadingOverlay.classList.toggle('active', show);
 }
 
-function renderMission() {
+async function fetchMission() {
+  showLoading(true);
+  try {
+    const response = await fetch('https://magicloops.dev/api/loop/6437544d-15ac-4d41-868e-3e0229f1eebd/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'generate',
+        mission: {},
+        userAnswer: '',
+      }),
+    });
+    const data = await response.json();
+    appState.mission = data;
+    state.mission = data;
+    renderMission();
+  } catch (error) {
+    console.error('Error obteniendo la misión', error);
+    showError('No se pudo obtener la misión. Intenta nuevamente.');
+  } finally {
+    showLoading(false);
+  }
+}
+
+async function correctUserAnswer(mission, userAnswer) {
+  const response = await fetch('https://magicloops.dev/api/loop/6437544d-15ac-4d41-868e-3e0229f1eebd/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      mode: 'correct',
+      mission,
+      userAnswer,
+    }),
+  });
+  const data = await response.json();
+  return data;
+}
+
+async function renderMission() {
+  if (!state.mission) {
+    return;
+  }
+
   const todayDate = new Date();
-  state.mission = missionForDate(todayDate);
   state.today = formatDate(todayDate);
 
   DOM.missionDate.textContent = formatDateToDisplay(todayDate);
@@ -221,7 +268,7 @@ function saveCoupleData(updated) {
   saveStoredData(data);
 }
 
-function submitResponse() {
+async function submitResponse() {
   const responseTextArea = document.getElementById('responseText');
   let response = responseTextArea.value.trim();
 
@@ -237,6 +284,9 @@ function submitResponse() {
 
   showLoading(true);
 
+  appState.response = response;
+  appState.correction = null;
+
   const coupleData = getCoupleData();
   if (!coupleData.responses[state.today]) {
     coupleData.responses[state.today] = {};
@@ -245,6 +295,15 @@ function submitResponse() {
     response,
     timestamp: Date.now(),
   };
+
+  try {
+    const correction = await correctUserAnswer(appState.mission, appState.response);
+    appState.correction = correction;
+    coupleData.responses[state.today][state.user].correction = correction;
+  } catch (error) {
+    console.error('No se pudo corregir la respuesta', error);
+    showError('La respuesta se guardó, pero no se pudo corregir.');
+  }
 
   saveCoupleData(coupleData);
   showLoading(false);
@@ -322,12 +381,13 @@ function renderSharedResponses() {
 
   const cards = responses
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([name, data]) => createResponseCard(name, data.response, helpNotes))
+    .map(([name, data]) => createResponseCard(name, data, helpNotes))
     .join('');
   DOM.responsesContainer.innerHTML = cards;
 }
 
-function createResponseCard(name, response, helpNotes) {
+function createResponseCard(name, responseData, helpNotes) {
+  const { response, correction } = responseData;
   const notes = helpNotes
     .filter((note) => note.from !== name)
     .map(
@@ -339,6 +399,16 @@ function createResponseCard(name, response, helpNotes) {
     )
     .join('');
 
+  const correctionBlock = correction
+    ? `
+      <div class="correction-block">
+        <p><strong>Feedback:</strong> ${correction.feedback || 'Sin feedback'}</p>
+        <p><strong>Versión corregida:</strong> ${(correction.corrected || '').replace(/\n/g, '<br>')}</p>
+        <p><strong>Puntuación:</strong> ${correction.score ?? 'N/A'}</p>
+      </div>
+    `
+    : '';
+
   return `
     <div class="response-card">
       <div class="response-header">
@@ -346,6 +416,7 @@ function createResponseCard(name, response, helpNotes) {
         <span>${name}</span>
       </div>
       <div class="response-text">${response.replace(/\n/g, '<br>')}</div>
+      ${correctionBlock}
       ${notes}
     </div>
   `;
@@ -402,10 +473,10 @@ function restoreSession() {
   }
 }
 
-function enterApp() {
+async function enterApp() {
   DOM.loginContainer.style.display = 'none';
   DOM.missionContainer.style.display = 'block';
-  renderMission();
+  await fetchMission();
   renderSharedResponses();
   updatePartnerStatus();
   persistSession();
