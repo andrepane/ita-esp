@@ -1,3 +1,25 @@
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js';
+import {
+  doc,
+  getDoc,
+  getFirestore,
+  onSnapshot,
+  setDoc,
+} from 'https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js';
+
+const firebaseConfig = {
+  apiKey: 'AIzaSyC4b0tQJ6pESLu3_XZoQw7Q3n-YaRGeJmE',
+  authDomain: 'parlaconmigo-fb132.firebaseapp.com',
+  projectId: 'parlaconmigo-fb132',
+  storageBucket: 'parlaconmigo-fb132.firebasestorage.app',
+  messagingSenderId: '290201300452',
+  appId: '1:290201300452:web:03d2562eea0ff24f96abf1',
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp);
+let unsubscribeCoupleListener = null;
+
 const DOM = {
   loginContainer: document.getElementById('loginContainer'),
   missionContainer: document.getElementById('missionContainer'),
@@ -35,9 +57,9 @@ const state = {
   currentLanguage: 'es',
   today: formatDate(new Date()),
   selectedOption: null,
+  coupleData: null,
 };
 
-const STORAGE_KEY = 'parlaconmigo-data';
 const SESSION_KEY = 'parlaconmigo-session';
 
 function formatDate(date) {
@@ -50,19 +72,6 @@ function formatDate(date) {
 function formatDateToDisplay(date) {
   const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
   return date.toLocaleDateString(state.currentLanguage === 'es' ? 'es-ES' : 'it-IT', options);
-}
-
-function getStoredData() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || { couples: {} };
-  } catch (error) {
-    console.error('Error leyendo localStorage', error);
-    return { couples: {} };
-  }
-}
-
-function saveStoredData(data) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
 function normalizeCode(code) {
@@ -79,6 +88,52 @@ function showError(message) {
 
 function showLoading(show) {
   DOM.loadingOverlay.classList.toggle('active', show);
+}
+
+function getCoupleDocRef() {
+  return doc(db, 'couples', state.coupleCode);
+}
+
+async function ensureCoupleData() {
+  const docRef = getCoupleDocRef();
+  const snapshot = await getDoc(docRef);
+
+  if (snapshot.exists()) {
+    state.coupleData = snapshot.data();
+    return;
+  }
+
+  const initialData = { responses: {}, help: {}, streakStart: state.today };
+  await setDoc(docRef, initialData);
+  state.coupleData = initialData;
+}
+
+function getCoupleData() {
+  if (!state.coupleData) {
+    state.coupleData = { responses: {}, help: {}, streakStart: state.today };
+  }
+  return state.coupleData;
+}
+
+async function saveCoupleData(updated) {
+  state.coupleData = updated;
+  await setDoc(getCoupleDocRef(), updated, { merge: true });
+}
+
+function subscribeToCoupleData() {
+  if (unsubscribeCoupleListener) {
+    unsubscribeCoupleListener();
+  }
+
+  const docRef = getCoupleDocRef();
+  unsubscribeCoupleListener = onSnapshot(docRef, (snapshot) => {
+    if (snapshot.exists()) {
+      state.coupleData = snapshot.data();
+      renderSharedResponses();
+      updatePartnerStatus();
+      hydrateExistingResponse();
+    }
+  });
 }
 
 async function fetchMission() {
@@ -253,21 +308,6 @@ function hydrateExistingResponse() {
   }
 }
 
-function getCoupleData() {
-  const data = getStoredData();
-  const code = state.coupleCode;
-  if (!data.couples[code]) {
-    data.couples[code] = { responses: {}, help: {}, streakStart: state.today };
-  }
-  return data.couples[code];
-}
-
-function saveCoupleData(updated) {
-  const data = getStoredData();
-  data.couples[state.coupleCode] = updated;
-  saveStoredData(data);
-}
-
 async function submitResponse() {
   const responseTextArea = document.getElementById('responseText');
   let response = responseTextArea.value.trim();
@@ -305,7 +345,7 @@ async function submitResponse() {
     showError('La respuesta se guardó, pero no se pudo corregir.');
   }
 
-  saveCoupleData(coupleData);
+  await saveCoupleData(coupleData);
   showLoading(false);
   renderResponseArea();
   renderSharedResponses();
@@ -313,7 +353,7 @@ async function submitResponse() {
   persistSession();
 }
 
-function sendHelpNote() {
+async function sendHelpNote() {
   const helpInput = document.getElementById('helpText');
   const text = helpInput.value.trim();
   if (!text) {
@@ -334,7 +374,7 @@ function sendHelpNote() {
     coupleData.help[state.today].push({ from: state.user, text, timestamp: Date.now() });
   }
 
-  saveCoupleData(coupleData);
+  await saveCoupleData(coupleData);
   helpInput.disabled = true;
   DOM.helpButton.textContent = 'Ayuda enviada';
   DOM.helpButton.disabled = true;
@@ -457,7 +497,7 @@ function persistSession() {
   );
 }
 
-function restoreSession() {
+async function restoreSession() {
   try {
     const session = JSON.parse(localStorage.getItem(SESSION_KEY));
     if (session?.user && session?.coupleCode) {
@@ -466,7 +506,7 @@ function restoreSession() {
       state.currentLanguage = session.language || 'es';
       DOM.userName.value = session.user;
       DOM.coupleCode.value = session.coupleCode;
-      enterApp();
+      await enterApp();
     }
   } catch (error) {
     console.error('No se pudo restaurar la sesión', error);
@@ -476,13 +516,16 @@ function restoreSession() {
 async function enterApp() {
   DOM.loginContainer.style.display = 'none';
   DOM.missionContainer.style.display = 'block';
+  state.today = formatDate(new Date());
+  await ensureCoupleData();
+  subscribeToCoupleData();
   await fetchMission();
   renderSharedResponses();
   updatePartnerStatus();
   persistSession();
 }
 
-function handleLogin(event) {
+async function handleLogin(event) {
   event.preventDefault();
   const name = DOM.userName.value.trim();
   const code = normalizeCode(DOM.coupleCode.value);
@@ -495,7 +538,7 @@ function handleLogin(event) {
   state.user = name;
   state.coupleCode = code;
   state.selectedOption = null;
-  enterApp();
+  await enterApp();
 }
 
 function switchLanguage() {
@@ -504,21 +547,14 @@ function switchLanguage() {
   renderMission();
 }
 
-function handleStorageChange(event) {
-  if (event.key === STORAGE_KEY && state.coupleCode) {
-    renderSharedResponses();
-    updatePartnerStatus();
-    hydrateExistingResponse();
-  }
-}
-
-function init() {
+async function init() {
   DOM.loginForm.addEventListener('submit', handleLogin);
   DOM.submitResponseButton.addEventListener('click', submitResponse);
   DOM.helpButton.addEventListener('click', sendHelpNote);
   DOM.languageToggle.addEventListener('click', switchLanguage);
-  window.addEventListener('storage', handleStorageChange);
-  restoreSession();
+  await restoreSession();
 }
 
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+  init();
+});
