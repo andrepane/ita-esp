@@ -30,6 +30,11 @@ const DOM = {
   backButton: document.getElementById('backButton'),
   missionDate: document.getElementById('missionDate'),
   missionType: document.getElementById('missionType'),
+  missionMeta: document.getElementById('missionMeta'),
+  missionSkill: document.getElementById('missionSkill'),
+  missionLevel: document.getElementById('missionLevel'),
+  missionTime: document.getElementById('missionTime'),
+  missionSource: document.getElementById('missionSource'),
   missionTitle: document.getElementById('missionTitle'),
   missionDescription: document.getElementById('missionDescription'),
   missionSpecificContent: document.getElementById('missionSpecificContent'),
@@ -64,6 +69,8 @@ const state = {
 };
 
 const SESSION_KEY = 'parlaconmigo-session';
+const MISSION_API_URL = 'https://magicloops.dev/api/loop/6437544d-15ac-4d41-868e-3e0229f1eebd/run';
+const MISSION_API_VERSION = 'v1';
 
 function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
@@ -165,6 +172,16 @@ async function saveCoupleData(updated) {
   await setDoc(getCoupleDocRef(), updated, { merge: true });
 }
 
+async function persistMissionMetadata(mission) {
+  const coupleData = getCoupleData();
+  if (!coupleData.missions) {
+    coupleData.missions = {};
+  }
+
+  coupleData.missions[state.today] = buildMissionMetadata(mission, mission.source || 'remoto');
+  await saveCoupleData(coupleData);
+}
+
 function subscribeToCoupleData() {
   if (unsubscribeCoupleListener) {
     unsubscribeCoupleListener();
@@ -181,42 +198,83 @@ function subscribeToCoupleData() {
   });
 }
 
+async function fetchRemoteMission() {
+  const response = await fetch(MISSION_API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      version: MISSION_API_VERSION,
+      mode: 'generate',
+      mission: {},
+      userAnswer: '',
+    }),
+  });
+  if (!response.ok) {
+    throw new Error('Respuesta no OK del generador remoto');
+  }
+  return response.json();
+}
+
+function buildMissionMetadata(mission, source) {
+  return {
+    id: mission.id || mission.type,
+    type: mission.type,
+    level: mission.level || 'A1',
+    skill: mission.skill || 'general',
+    estimatedTime: mission.estimatedTime || 5,
+    version: mission.version || MISSION_API_VERSION,
+    source,
+  };
+}
+
+function enrichMission(mission, source) {
+  const meta = buildMissionMetadata(mission, source);
+  return { ...mission, ...meta };
+}
+
+function pickLocalMission(date) {
+  const mission = missionForDate(date);
+  return enrichMission(mission, 'catálogo local');
+}
+
 async function fetchMission() {
   showLoading(true);
+  const todayDate = new Date();
+  state.today = formatDate(todayDate);
   try {
-    const response = await fetch('https://magicloops.dev/api/loop/6437544d-15ac-4d41-868e-3e0229f1eebd/run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mode: 'generate',
-        mission: {},
-        userAnswer: '',
-      }),
-    });
-    const data = await response.json();
-    appState.mission = data;
-    state.mission = data;
-    renderMission();
+    const remoteMission = await fetchRemoteMission();
+    const enriched = enrichMission(remoteMission, 'remoto');
+    appState.mission = enriched;
+    state.mission = enriched;
+    await persistMissionMetadata(enriched);
   } catch (error) {
-    console.error('Error obteniendo la misión', error);
-    showError('No se pudo obtener la misión. Intenta nuevamente.');
+    console.error('Error obteniendo la misión, usando catálogo local', error);
+    const localMission = pickLocalMission(todayDate);
+    showError('Usaremos una misión local mientras el generador se recupera.');
+    appState.mission = localMission;
+    state.mission = localMission;
+    await persistMissionMetadata(localMission);
   } finally {
+    renderMission();
     showLoading(false);
   }
 }
 
 async function correctUserAnswer(mission, userAnswer) {
-  const response = await fetch('https://magicloops.dev/api/loop/6437544d-15ac-4d41-868e-3e0229f1eebd/run', {
+  const response = await fetch(MISSION_API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      version: MISSION_API_VERSION,
       mode: 'correct',
       mission,
       userAnswer,
     }),
   });
-  const data = await response.json();
-  return data;
+  if (!response.ok) {
+    throw new Error('No se pudo obtener corrección del endpoint');
+  }
+  return response.json();
 }
 
 async function renderMission() {
@@ -232,8 +290,19 @@ async function renderMission() {
   DOM.missionTitle.textContent = state.mission.title;
   DOM.missionDescription.textContent = state.mission.description;
 
+  renderMissionMeta(state.mission);
+
   renderMissionSpecificContent(state.mission);
   renderResponseArea();
+}
+
+function renderMissionMeta(mission) {
+  if (!DOM.missionMeta) return;
+
+  DOM.missionSkill.textContent = `Skill: ${mission.skill || 'general'}`;
+  DOM.missionLevel.textContent = `Nivel: ${mission.level || 'A1'}`;
+  DOM.missionTime.textContent = `${mission.estimatedTime || 5} min`;
+  DOM.missionSource.textContent = mission.source === 'remoto' ? 'Remoto' : 'Catálogo';
 }
 
 function renderMissionSpecificContent(mission) {
@@ -508,6 +577,7 @@ function createResponseCard(name, responseData, helpNotes) {
         <p><strong>Feedback:</strong> ${correction.feedback || 'Sin feedback'}</p>
         <p><strong>Versión corregida:</strong> ${(correction.corrected || '').replace(/\n/g, '<br>')}</p>
         <p><strong>Puntuación:</strong> ${correction.score ?? 'N/A'}</p>
+        ${renderMicroTips(response, correction, state.mission)}
       </div>
     `
     : '';
@@ -523,6 +593,45 @@ function createResponseCard(name, responseData, helpNotes) {
       ${notes}
     </div>
   `;
+}
+
+function renderMicroTips(response, correction, mission) {
+  const tips = buildMicroTips(response, correction, mission);
+  if (!tips.length) return '';
+
+  const items = tips.map((tip) => `<li>${tip}</li>`).join('');
+  return `
+    <div class="micro-tips">
+      <p class="muted">Mini-tips de repaso:</p>
+      <ul>${items}</ul>
+    </div>
+  `;
+}
+
+function buildMicroTips(response, correction, mission) {
+  const tips = [];
+  const normalizedResponse = (response || '').toLowerCase();
+
+  if (mission?.type === 'palabra-del-dia' && mission.content?.word) {
+    const keyword = mission.content.word.toLowerCase();
+    if (!normalizedResponse.includes(keyword)) {
+      tips.push(`Intenta usar la palabra clave "${mission.content.word}" en tu frase.`);
+    }
+  }
+
+  if (mission?.type === 'completa-hueco') {
+    tips.push('Verifica concordancia de género y número cuando completes la frase.');
+  }
+
+  if (correction?.score !== undefined && correction.score < 8) {
+    tips.push('Revisa artículos definidos/indefinidos (il, la, un, una) para mejorar la fluidez.');
+  }
+
+  if (!tips.length) {
+    tips.push('Guarda esta corrección para repasarla juntos en la próxima sesión.');
+  }
+
+  return tips;
 }
 
 function calculateStreak(coupleData) {
