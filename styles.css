@@ -238,6 +238,41 @@ textarea {
   font-weight: 600;
 }
 
+.mission-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 1rem;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: rgba(156, 100, 253, 0.1);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.badge-secondary {
+  background: rgba(49, 196, 141, 0.14);
+  color: #7ee0b6;
+}
+
+.badge-tertiary {
+  background: rgba(227, 160, 8, 0.12);
+  color: #ffda8a;
+}
+
+.badge-outline {
+  background: transparent;
+  border: 1px solid var(--surface-light);
+  color: var(--text-secondary);
+}
+
 .mission-content {
   margin-bottom: 1.5rem;
 }
@@ -280,6 +315,23 @@ textarea {
 .option-button.selected {
   background-color: rgba(126, 58, 242, 0.2);
   border-color: var(--primary);
+}
+
+.micro-tips {
+  margin-top: 12px;
+  background: var(--surface-light);
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: var(--text);
+}
+
+.micro-tips ul {
+  margin: 8px 0 0 18px;
+  line-height: 1.5;
+}
+
+.muted {
+  color: var(--text-secondary);
 }
 
 .partner-status {
