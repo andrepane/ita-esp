@@ -42,6 +42,8 @@ const DOM = {
   streakCount: document.getElementById('streakCount'),
   loadingOverlay: document.getElementById('loadingOverlay'),
   languageToggle: document.getElementById('languageToggle'),
+  conversationTopic: document.getElementById('conversationTopic'),
+  conversationTopicText: document.getElementById('conversationTopicText'),
 };
 
 const appState = {
@@ -61,6 +63,19 @@ const state = {
 };
 
 const SESSION_KEY = 'parlaconmigo-session';
+
+const conversationTopics = [
+  { prompt: 'Parlate del vostro piatto italiano preferito. Quali ingredienti vi piacciono di più?' },
+  { prompt: 'Raccontate un ricordo di vacanza in Italia o un posto dove vi piacerebbe andare.' },
+  { prompt: 'Descrivete la vostra serata ideale a casa: cena, film o musica?' },
+  { prompt: 'Parlate dei vostri gesti di gentilezza preferiti nella vita quotidiana.' },
+  { prompt: 'Qual è una parola o espressione italiana che vi fa sorridere? Provate a usarla.' },
+  { prompt: 'Condividete tre cose per cui siete grati oggi, usando frasi semplici.' },
+  { prompt: 'Qual è una canzone italiana che conoscete? Cantate un pezzetto o parlate del testo.' },
+  { prompt: 'Immaginate un fine settimana a Roma: cosa vorreste vedere o mangiare?' },
+  { prompt: 'Parlate della vostra routine mattutina ideale, passo per passo, in italiano.' },
+  { prompt: 'Raccontate un piccolo sogno o obiettivo per questo mesetto e come aiutarvi a vicenda.' },
+];
 
 function formatDate(date) {
   const year = date.getFullYear();
@@ -408,10 +423,15 @@ function renderSharedResponses() {
 
   if (responses.length === 0) {
     DOM.sharedResponsesContainer.style.display = 'none';
+    if (DOM.conversationTopic) {
+      DOM.conversationTopic.style.display = 'none';
+    }
     return;
   }
 
   const hasBoth = responses.length >= 2;
+  renderConversationTopic(hasBoth);
+
   if (hasBoth) {
     DOM.sharedResponsesContainer.style.display = 'block';
     DOM.streakCount.textContent = calculateStreak(coupleData);
@@ -424,6 +444,19 @@ function renderSharedResponses() {
     .map(([name, data]) => createResponseCard(name, data, helpNotes))
     .join('');
   DOM.responsesContainer.innerHTML = cards;
+}
+
+function renderConversationTopic(hasBothResponses) {
+  if (!DOM.conversationTopic || !DOM.conversationTopicText) return;
+
+  if (!hasBothResponses) {
+    DOM.conversationTopic.style.display = 'none';
+    return;
+  }
+
+  const topic = getConversationTopicForDate(new Date(state.today));
+  DOM.conversationTopicText.textContent = topic.prompt;
+  DOM.conversationTopic.style.display = 'block';
 }
 
 function createResponseCard(name, responseData, helpNotes) {
@@ -477,6 +510,11 @@ function calculateStreak(coupleData) {
     }
   }
   return streak;
+}
+
+function getConversationTopicForDate(date) {
+  const index = date.getDate() + date.getMonth() * 31 + date.getFullYear();
+  return conversationTopics[index % conversationTopics.length];
 }
 
 function getMissionTypeDisplay(type) {
