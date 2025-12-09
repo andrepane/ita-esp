@@ -27,6 +27,7 @@ const DOM = {
   loginError: document.getElementById('loginError'),
   userName: document.getElementById('userName'),
   coupleCode: document.getElementById('coupleCode'),
+  backButton: document.getElementById('backButton'),
   missionDate: document.getElementById('missionDate'),
   missionType: document.getElementById('missionType'),
   missionTitle: document.getElementById('missionTitle'),
@@ -580,6 +581,34 @@ async function restoreSession() {
   }
 }
 
+function returnToHome() {
+  if (unsubscribeCoupleListener) {
+    unsubscribeCoupleListener();
+    unsubscribeCoupleListener = null;
+  }
+
+  const currentName = state.user || DOM.userName.value || '';
+  const currentCode = state.coupleCode || DOM.coupleCode.value || '';
+
+  state.user = null;
+  state.coupleCode = null;
+  state.mission = null;
+  state.selectedOption = null;
+  state.coupleData = null;
+  appState.mission = null;
+  appState.response = '';
+  appState.correction = null;
+
+  localStorage.removeItem(SESSION_KEY);
+
+  DOM.userName.value = currentName;
+  DOM.coupleCode.value = currentCode;
+  DOM.loginContainer.style.display = 'flex';
+  DOM.missionContainer.style.display = 'none';
+  DOM.loginError.textContent = '';
+  DOM.loginError.style.display = 'none';
+}
+
 async function enterApp() {
   DOM.loginContainer.style.display = 'none';
   DOM.missionContainer.style.display = 'block';
@@ -619,6 +648,7 @@ async function init() {
   DOM.submitResponseButton.addEventListener('click', submitResponse);
   DOM.helpButton.addEventListener('click', sendHelpNote);
   DOM.languageToggle.addEventListener('click', switchLanguage);
+  DOM.backButton.addEventListener('click', returnToHome);
   await restoreSession();
 }
 
