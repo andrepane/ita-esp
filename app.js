@@ -55,7 +55,6 @@ const DOM = {
 const appState = {
   mission: null,
   response: '',
-  correction: null,
 };
 
 const state = {
@@ -69,8 +68,10 @@ const state = {
 };
 
 const SESSION_KEY = 'parlaconmigo-session';
-const MISSION_API_URL = 'https://magicloops.dev/api/loop/6437544d-15ac-4d41-868e-3e0229f1eebd/run';
-const MISSION_API_VERSION = 'v1';
+
+// NUEVA API SIMPLE: un ejercicio por llamada
+const MISSION_API_URL = 'https://magicloops.dev/api/loop/6a36ba0a-6ec2-4af7-8f5f-57379cc044a9/run';
+const MISSION_API_VERSION = 'simple-v1';
 
 function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
@@ -164,6 +165,8 @@ function getCoupleData() {
   if (!state.coupleData) {
     state.coupleData = { responses: {}, help: {}, streakStart: state.today };
   }
+  if (!state.coupleData.responses) state.coupleData.responses = {};
+  if (!state.coupleData.help) state.coupleData.help = {};
   return state.coupleData;
 }
 
@@ -210,28 +213,24 @@ function subscribeToCoupleData() {
   });
 }
 
+// NUEVA LLAMADA REMOTA: sin mode, sin userAnswer, solo {}
 async function fetchRemoteMission() {
   const response = await fetch(MISSION_API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      version: MISSION_API_VERSION,
-      mode: 'generate',
-      mission: {},
-      userAnswer: '',
-    }),
+    body: JSON.stringify({}),
   });
   if (!response.ok) {
     throw new Error('Respuesta no OK del generador remoto');
   }
-  return response.json();
+  return response.json(); // devuelve { type, instruction, prompt, options?, answer, hint? }
 }
 
 function buildMissionMetadata(mission, source) {
   return {
-    id: mission.id || mission.type,
+    id: mission.id || `${mission.type || 'ejercicio'}-${state.today}`,
     type: mission.type,
-    level: mission.level || 'A1',
+    level: mission.level || 'A1-A2',
     skill: mission.skill || 'general',
     estimatedTime: mission.estimatedTime || 5,
     version: mission.version || MISSION_API_VERSION,
@@ -244,9 +243,60 @@ function enrichMission(mission, source) {
   return { ...mission, ...meta };
 }
 
+// Adaptación de misión local antigua (missions.js) al nuevo formato de ejercicio
+function adaptLegacyMissionToExercise(legacy) {
+  if (!legacy || !legacy.type) return null;
+
+  switch (legacy.type) {
+    case 'palabra-del-dia':
+      return {
+        type: 'traduccion-palabra',
+        instruction: legacy.description || 'Traduce la palabra al italiano.',
+        prompt: `¿Cómo se dice "${legacy.content.word}" en italiano?`,
+        answer: legacy.content.word,
+        hint: legacy.content.definition,
+      };
+    case 'completa-hueco':
+      return {
+        type: 'completar-frase',
+        instruction: legacy.description || 'Completa la frase en italiano.',
+        prompt: legacy.content.sentence,
+        answer: '',
+        hint: legacy.content.text,
+      };
+    case 'elige-escena':
+      return {
+        type: 'elegir-opcion',
+        instruction: legacy.description || 'Elige la mejor opción en italiano.',
+        prompt: legacy.content.scenario,
+        options: legacy.content.options,
+        answer: legacy.content.options[0],
+        hint: '',
+      };
+    case 'mini-dialogo':
+      return {
+        type: 'traduccion-frase',
+        instruction: legacy.description || 'Usa este mini diálogo como inspiración y crea tu propia frase.',
+        prompt: `${legacy.content.situation}\nA: ${legacy.content.characterA}\nB: ${legacy.content.characterB}`,
+        answer: legacy.content.characterB,
+        hint: '',
+      };
+    case 'frase-espejo':
+    default:
+      return {
+        type: 'traduccion-frase',
+        instruction: legacy.description || 'Responde en italiano con tus propias palabras.',
+        prompt: legacy.content.phrase || 'Exprésate en italiano sobre algo que te haga feliz.',
+        answer: '',
+        hint: '',
+      };
+  }
+}
+
 function pickLocalMission(date) {
-  const mission = missionForDate(date);
-  return enrichMission(mission, 'catálogo local');
+  const legacy = missionForDate(date); // viene de missions.js
+  const adapted = adaptLegacyMissionToExercise(legacy);
+  return enrichMission(adapted, 'catálogo local');
 }
 
 async function fetchMission() {
@@ -255,7 +305,8 @@ async function fetchMission() {
   state.today = formatDate(todayDate);
 
   const savedMission = getSavedMissionForToday();
-  if (savedMission) {
+  // Solo reutilizamos la misión guardada si ya está en el formato nuevo (instruction + prompt)
+  if (savedMission && savedMission.instruction && savedMission.prompt) {
     appState.mission = savedMission;
     state.mission = savedMission;
     renderMission();
@@ -282,23 +333,6 @@ async function fetchMission() {
   }
 }
 
-async function correctUserAnswer(mission, userAnswer) {
-  const response = await fetch(MISSION_API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      version: MISSION_API_VERSION,
-      mode: 'correct',
-      mission,
-      userAnswer,
-    }),
-  });
-  if (!response.ok) {
-    throw new Error('No se pudo obtener corrección del endpoint');
-  }
-  return response.json();
-}
-
 async function renderMission() {
   if (!state.mission) {
     return;
@@ -307,14 +341,15 @@ async function renderMission() {
   const todayDate = new Date();
   state.today = formatDate(todayDate);
 
+  const mission = state.mission;
+
   DOM.missionDate.textContent = formatDateToDisplay(todayDate);
-  DOM.missionType.textContent = getMissionTypeDisplay(state.mission.type);
-  DOM.missionTitle.textContent = state.mission.title;
-  DOM.missionDescription.textContent = state.mission.description;
+  DOM.missionType.textContent = getMissionTypeDisplay(mission.type);
+  DOM.missionTitle.textContent = 'Ejercicio del día';
+  DOM.missionDescription.textContent = mission.instruction || 'Practica un poco de italiano con tu pareja.';
 
-  renderMissionMeta(state.mission);
-
-  renderMissionSpecificContent(state.mission);
+  renderMissionMeta(mission);
+  renderMissionSpecificContent(mission);
   renderResponseArea();
 }
 
@@ -322,57 +357,24 @@ function renderMissionMeta(mission) {
   if (!DOM.missionMeta) return;
 
   DOM.missionSkill.textContent = `Skill: ${mission.skill || 'general'}`;
-  DOM.missionLevel.textContent = `Nivel: ${mission.level || 'A1'}`;
+  DOM.missionLevel.textContent = `Nivel: ${mission.level || 'A1-A2'}`;
   DOM.missionTime.textContent = `${mission.estimatedTime || 5} min`;
   DOM.missionSource.textContent = mission.source === 'remoto' ? 'Remoto' : 'Catálogo';
 }
 
 function renderMissionSpecificContent(mission) {
   let content = '';
-  switch (mission.type) {
-    case 'frase-espejo':
-      content = `
-        <div class="highlight-block">
-          <p>Frase del día:</p>
-          <p class="mission-highlight">${mission.content.phrase}</p>
-        </div>
-      `;
-      break;
-    case 'palabra-del-dia':
-      content = `
-        <div class="highlight-block">
-          <p class="mission-highlight">${mission.content.word}</p>
-          <p>${mission.content.definition}</p>
-          <p class="muted">Ejemplo: "${mission.content.example}"</p>
-        </div>
-      `;
-      break;
-    case 'completa-hueco':
-      content = `
-        <div class="highlight-block">
-          <p>${mission.content.text}</p>
-          <p class="mission-highlight">${mission.content.sentence.replace('___', '<span class="blank">___</span>')}</p>
-        </div>
-      `;
-      break;
-    case 'elige-escena':
-      content = `
-        <div class="highlight-block">
-          <p>${mission.content.scenario}</p>
-          <p class="muted">Elige una opción y explica por qué la elegiste.</p>
-        </div>
-      `;
-      break;
-    case 'mini-dialogo':
-    default:
-      content = `
-        <div class="highlight-block">
-          <p>Situación: ${mission.content.situation}</p>
-          <p><strong>Personaje A:</strong> ${mission.content.characterA}</p>
-          <p><strong>Personaje B:</strong> ${mission.content.characterB}</p>
-        </div>
-      `;
-  }
+  const hintHtml = mission.hint
+    ? `<p class="muted">Pista: ${mission.hint}</p>`
+    : '';
+
+  content = `
+    <div class="highlight-block">
+      <p class="mission-highlight">${(mission.prompt || '').replace(/\n/g, '<br>')}</p>
+    </div>
+    ${hintHtml}
+  `;
+
   DOM.missionSpecificContent.innerHTML = content;
 }
 
@@ -380,14 +382,15 @@ function renderResponseArea() {
   const { mission } = state;
   let content = '';
 
-  if (mission.type === 'elige-escena') {
+  // Si hay opciones (pregunta tipo test)
+  if (mission.type === 'elegir-opcion' && Array.isArray(mission.options)) {
     content += `
       <div class="options-container">
-        ${mission.content.options
+        ${mission.options
           .map(
             (option, index) => `
-            <button type="button" class="option-button" data-option="${index}">${option}</button>
-          `,
+          <button type="button" class="option-button" data-option="${index}">${option}</button>
+        `,
           )
           .join('')}
       </div>
@@ -403,7 +406,7 @@ function renderResponseArea() {
 
   DOM.responseArea.innerHTML = content;
 
-  if (mission.type === 'elige-escena') {
+  if (mission.type === 'elegir-opcion' && Array.isArray(mission.options)) {
     const optionButtons = DOM.responseArea.querySelectorAll('.option-button');
     optionButtons.forEach((button) => {
       button.addEventListener('click', () => {
@@ -425,7 +428,7 @@ function hydrateExistingResponse() {
   const helpInput = document.getElementById('helpText');
   const responseArea = document.getElementById('responseText');
 
-  if (myResponse) {
+  if (myResponse && responseArea) {
     responseArea.value = myResponse.response;
     responseArea.disabled = true;
     DOM.submitResponseButton.textContent = 'Respuesta enviada';
@@ -433,7 +436,7 @@ function hydrateExistingResponse() {
     DOM.submitResponseButton.style.backgroundColor = 'var(--success)';
   }
 
-  if (helpNotes.length) {
+  if (helpInput && helpNotes.length) {
     const helpFromMe = helpNotes.find((note) => note.from === state.user);
     if (helpFromMe) {
       helpInput.value = helpFromMe.text;
@@ -446,10 +449,12 @@ function hydrateExistingResponse() {
 
 async function submitResponse() {
   const responseTextArea = document.getElementById('responseText');
+  if (!responseTextArea) return;
+
   let response = responseTextArea.value.trim();
 
-  if (state.mission.type === 'elige-escena' && state.selectedOption !== null) {
-    const selected = state.mission.content.options[state.selectedOption];
+  if (state.mission.type === 'elegir-opcion' && state.selectedOption !== null) {
+    const selected = state.mission.options[state.selectedOption];
     response = `Opción: ${selected}\n${response}`.trim();
   }
 
@@ -461,7 +466,6 @@ async function submitResponse() {
   showLoading(true);
 
   appState.response = response;
-  appState.correction = null;
 
   const coupleData = getCoupleData();
   if (!coupleData.responses[state.today]) {
@@ -471,15 +475,6 @@ async function submitResponse() {
     response,
     timestamp: Date.now(),
   };
-
-  try {
-    const correction = await correctUserAnswer(appState.mission, appState.response);
-    appState.correction = correction;
-    coupleData.responses[state.today][state.user].correction = correction;
-  } catch (error) {
-    console.error('No se pudo corregir la respuesta', error);
-    showError('La respuesta se guardó, pero no se pudo corregir.');
-  }
 
   await saveCoupleData(coupleData);
   showLoading(false);
@@ -491,6 +486,8 @@ async function submitResponse() {
 
 async function sendHelpNote() {
   const helpInput = document.getElementById('helpText');
+  if (!helpInput) return;
+
   const text = helpInput.value.trim();
   if (!text) {
     showError('Escribe un mensaje para poder ayudar a tu pareja.');
@@ -581,7 +578,7 @@ function renderConversationTopic(hasBothResponses) {
 }
 
 function createResponseCard(name, responseData, helpNotes) {
-  const { response, correction } = responseData;
+  const { response } = responseData;
   const notes = helpNotes
     .filter((note) => note.from !== name)
     .map(
@@ -593,17 +590,6 @@ function createResponseCard(name, responseData, helpNotes) {
     )
     .join('');
 
-  const correctionBlock = correction
-    ? `
-      <div class="correction-block">
-        <p><strong>Feedback:</strong> ${correction.feedback || 'Sin feedback'}</p>
-        <p><strong>Versión corregida:</strong> ${(correction.corrected || '').replace(/\n/g, '<br>')}</p>
-        <p><strong>Puntuación:</strong> ${correction.score ?? 'N/A'}</p>
-        ${renderMicroTips(response, correction, state.mission)}
-      </div>
-    `
-    : '';
-
   return `
     <div class="response-card">
       <div class="response-header">
@@ -611,49 +597,9 @@ function createResponseCard(name, responseData, helpNotes) {
         <span>${name}</span>
       </div>
       <div class="response-text">${response.replace(/\n/g, '<br>')}</div>
-      ${correctionBlock}
       ${notes}
     </div>
   `;
-}
-
-function renderMicroTips(response, correction, mission) {
-  const tips = buildMicroTips(response, correction, mission);
-  if (!tips.length) return '';
-
-  const items = tips.map((tip) => `<li>${tip}</li>`).join('');
-  return `
-    <div class="micro-tips">
-      <p class="muted">Mini-tips de repaso:</p>
-      <ul>${items}</ul>
-    </div>
-  `;
-}
-
-function buildMicroTips(response, correction, mission) {
-  const tips = [];
-  const normalizedResponse = (response || '').toLowerCase();
-
-  if (mission?.type === 'palabra-del-dia' && mission.content?.word) {
-    const keyword = mission.content.word.toLowerCase();
-    if (!normalizedResponse.includes(keyword)) {
-      tips.push(`Intenta usar la palabra clave "${mission.content.word}" en tu frase.`);
-    }
-  }
-
-  if (mission?.type === 'completa-hueco') {
-    tips.push('Verifica concordancia de género y número cuando completes la frase.');
-  }
-
-  if (correction?.score !== undefined && correction.score < 8) {
-    tips.push('Revisa artículos definidos/indefinidos (il, la, un, una) para mejorar la fluidez.');
-  }
-
-  if (!tips.length) {
-    tips.push('Guarda esta corrección para repasarla juntos en la próxima sesión.');
-  }
-
-  return tips;
 }
 
 function calculateStreak(coupleData) {
@@ -680,13 +626,19 @@ function getConversationTopicForDate(date) {
 
 function getMissionTypeDisplay(type) {
   const types = {
+    'traduccion-palabra': 'Traducción de palabra',
+    'traduccion-frase': 'Traducción de frase',
+    'completar-frase': 'Completar frase',
+    'elegir-opcion': 'Elegir opción',
+    'ordenar-palabras': 'Ordenar palabras',
+    // por si queda alguna misión antigua
     'frase-espejo': 'Frase Espejo',
     'palabra-del-dia': 'Palabra del Día',
     'completa-hueco': 'Completa el Hueco',
     'elige-escena': 'Elige la Escena',
     'mini-dialogo': 'Mini Diálogo',
   };
-  return types[type] || type;
+  return types[type] || type || 'Ejercicio';
 }
 
 function persistSession() {
@@ -728,7 +680,6 @@ function returnToHome() {
   state.coupleData = null;
   appState.mission = null;
   appState.response = '';
-  appState.correction = null;
 
   localStorage.removeItem(SESSION_KEY);
 
