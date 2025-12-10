@@ -116,6 +116,26 @@
 
         <div id="responsesContainer"></div>
       </div>
+
+      <div class="vocabulary-card" id="vocabularyContainer">
+        <div class="vocabulary-header">
+          <div>
+            <div class="vocabulary-title">Vocabulario compartido</div>
+            <div class="vocabulary-subtitle">Palabras que añadís en esta sala</div>
+          </div>
+          <i class="fas fa-book"></i>
+        </div>
+
+        <form id="vocabularyForm" class="vocabulary-form">
+          <div class="vocabulary-inputs">
+            <input type="text" id="vocabularyItalian" placeholder="Parola o frase in italiano" autocomplete="off" />
+            <input type="text" id="vocabularyTranslation" placeholder="Traducción al español (o nota)" autocomplete="off" />
+          </div>
+          <button class="btn" type="submit">Añadir palabra</button>
+        </form>
+
+        <div class="vocabulary-list" id="vocabularyList"></div>
+      </div>
     </section>
   </main>
 
