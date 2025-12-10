@@ -178,8 +178,20 @@ async function persistMissionMetadata(mission) {
     coupleData.missions = {};
   }
 
-  coupleData.missions[state.today] = buildMissionMetadata(mission, mission.source || 'remoto');
+  if (coupleData.missions[state.today]?.mission) {
+    return;
+  }
+
+  coupleData.missions[state.today] = {
+    mission,
+    meta: buildMissionMetadata(mission, mission.source || 'remoto'),
+  };
   await saveCoupleData(coupleData);
+}
+
+function getSavedMissionForToday() {
+  const coupleData = getCoupleData();
+  return coupleData.missions?.[state.today]?.mission || null;
 }
 
 function subscribeToCoupleData() {
@@ -241,6 +253,16 @@ async function fetchMission() {
   showLoading(true);
   const todayDate = new Date();
   state.today = formatDate(todayDate);
+
+  const savedMission = getSavedMissionForToday();
+  if (savedMission) {
+    appState.mission = savedMission;
+    state.mission = savedMission;
+    renderMission();
+    showLoading(false);
+    return;
+  }
+
   try {
     const remoteMission = await fetchRemoteMission();
     const enriched = enrichMission(remoteMission, 'remoto');
