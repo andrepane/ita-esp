@@ -69,8 +69,8 @@ const state = {
 };
 
 const SESSION_KEY = 'parlaconmigo-session';
-const MISSION_API_URL = 'https://magicloops.dev/api/loop/6437544d-15ac-4d41-868e-3e0229f1eebd/run';
-const MISSION_API_VERSION = 'v1';
+const MISSION_API_URL = 'https://magicloops.dev/api/loop/6a36ba0a-6ec2-4af7-8f5f-57379cc044a9/run';
+const MISSION_API_VERSION = 'latest';
 
 function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
@@ -214,12 +214,7 @@ async function fetchRemoteMission() {
   const response = await fetch(MISSION_API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      version: MISSION_API_VERSION,
-      mode: 'generate',
-      mission: {},
-      userAnswer: '',
-    }),
+    body: JSON.stringify({}),
   });
   if (!response.ok) {
     throw new Error('Respuesta no OK del generador remoto');
@@ -287,8 +282,6 @@ async function correctUserAnswer(mission, userAnswer) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      version: MISSION_API_VERSION,
-      mode: 'correct',
       mission,
       userAnswer,
     }),
