@@ -413,6 +413,80 @@ textarea {
   margin-bottom: 1rem;
 }
 
+.vocabulary-card {
+  background-color: var(--surface);
+  border-radius: 12px;
+  padding: 1.5rem;
+  border: 1px solid var(--surface-light);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.vocabulary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  color: var(--text-secondary);
+}
+
+.vocabulary-header i {
+  color: var(--primary);
+  font-size: 1.4rem;
+}
+
+.vocabulary-title {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.vocabulary-subtitle {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.vocabulary-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.vocabulary-inputs {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.vocabulary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.vocabulary-item {
+  border: 1px solid var(--surface-light);
+  border-radius: 12px;
+  padding: 12px;
+  background-color: var(--surface-light);
+}
+
+.vocabulary-italian {
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.vocabulary-translation {
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.vocabulary-meta {
+  margin-top: 6px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
 .response-header {
   display: flex;
   align-items: center;
@@ -490,6 +564,10 @@ textarea {
 
   .mission-card {
     padding: 2rem;
+  }
+
+  .vocabulary-inputs {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 

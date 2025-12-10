@@ -50,6 +50,11 @@ const DOM = {
   languageToggle: document.getElementById('languageToggle'),
   conversationTopic: document.getElementById('conversationTopic'),
   conversationTopicText: document.getElementById('conversationTopicText'),
+  vocabularyContainer: document.getElementById('vocabularyContainer'),
+  vocabularyForm: document.getElementById('vocabularyForm'),
+  vocabularyItalian: document.getElementById('vocabularyItalian'),
+  vocabularyTranslation: document.getElementById('vocabularyTranslation'),
+  vocabularyList: document.getElementById('vocabularyList'),
 };
 
 const appState = {
@@ -131,6 +136,12 @@ function normalizeCode(code) {
   return code.trim().toUpperCase();
 }
 
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text || '';
+  return div.innerHTML;
+}
+
 function showError(message) {
   DOM.loginError.textContent = message;
   DOM.loginError.style.display = 'block';
@@ -156,17 +167,18 @@ async function ensureCoupleData() {
     return;
   }
 
-  const initialData = { responses: {}, help: {}, streakStart: state.today };
+  const initialData = { responses: {}, help: {}, streakStart: state.today, vocabulary: [] };
   await setDoc(docRef, initialData);
   state.coupleData = initialData;
 }
 
 function getCoupleData() {
   if (!state.coupleData) {
-    state.coupleData = { responses: {}, help: {}, streakStart: state.today };
+    state.coupleData = { responses: {}, help: {}, streakStart: state.today, vocabulary: [] };
   }
   if (!state.coupleData.responses) state.coupleData.responses = {};
   if (!state.coupleData.help) state.coupleData.help = {};
+  if (!state.coupleData.vocabulary) state.coupleData.vocabulary = [];
   return state.coupleData;
 }
 
@@ -207,6 +219,7 @@ function subscribeToCoupleData() {
     if (snapshot.exists()) {
       state.coupleData = snapshot.data();
       renderSharedResponses();
+      renderVocabulary();
       updatePartnerStatus();
       hydrateExistingResponse();
     }
@@ -514,6 +527,50 @@ async function sendHelpNote() {
   renderSharedResponses();
 }
 
+async function addVocabularyEntry(event) {
+  event.preventDefault();
+
+  if (!state.user || !state.coupleCode) {
+    showError('Inicia sesión antes de guardar vocabulario.');
+    return;
+  }
+
+  const italian = (DOM.vocabularyItalian?.value || '').trim();
+  const translation = (DOM.vocabularyTranslation?.value || '').trim();
+
+  if (!italian || !translation) {
+    showError('Añade la palabra en italiano y su traducción.');
+    return;
+  }
+
+  showLoading(true);
+
+  try {
+    const coupleData = getCoupleData();
+    if (!Array.isArray(coupleData.vocabulary)) {
+      coupleData.vocabulary = [];
+    }
+
+    coupleData.vocabulary.unshift({
+      id: `voc-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      italian,
+      translation,
+      addedBy: state.user,
+      timestamp: Date.now(),
+    });
+
+    await saveCoupleData(coupleData);
+    if (DOM.vocabularyItalian) DOM.vocabularyItalian.value = '';
+    if (DOM.vocabularyTranslation) DOM.vocabularyTranslation.value = '';
+    renderVocabulary();
+  } catch (error) {
+    console.error('No se pudo guardar el vocabulario', error);
+    showError('No se pudo guardar la palabra. Inténtalo de nuevo.');
+  } finally {
+    showLoading(false);
+  }
+}
+
 function updatePartnerStatus() {
   const coupleData = getCoupleData();
   const todayResponses = coupleData.responses[state.today] || {};
@@ -598,6 +655,42 @@ function createResponseCard(name, responseData, helpNotes) {
       </div>
       <div class="response-text">${response.replace(/\n/g, '<br>')}</div>
       ${notes}
+    </div>
+  `;
+}
+
+function renderVocabulary() {
+  if (!DOM.vocabularyList) return;
+
+  const coupleData = getCoupleData();
+  const vocabulary = Array.isArray(coupleData.vocabulary) ? coupleData.vocabulary : [];
+
+  if (vocabulary.length === 0) {
+    DOM.vocabularyList.innerHTML =
+      '<p class="muted">Añade una palabra en italiano y su traducción para compartirla con tu pareja.</p>';
+    return;
+  }
+
+  const items = vocabulary
+    .slice()
+    .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+    .map(createVocabularyItem)
+    .join('');
+  DOM.vocabularyList.innerHTML = items;
+}
+
+function createVocabularyItem(entry) {
+  const italianText = escapeHtml(entry.italian || entry.word || '');
+  const translationText = escapeHtml(entry.translation || '');
+  const dateString = entry.timestamp ? new Date(entry.timestamp).toLocaleDateString('es-ES') : '';
+  const metaParts = [entry.addedBy ? `Añadido por ${escapeHtml(entry.addedBy)}` : null, dateString];
+  const metaText = metaParts.filter(Boolean).join(' · ') || 'Vocabulario compartido';
+
+  return `
+    <div class="vocabulary-item">
+      <div class="vocabulary-italian">${italianText}</div>
+      <div class="vocabulary-translation">${translationText}</div>
+      <div class="vocabulary-meta">${metaText}</div>
     </div>
   `;
 }
@@ -696,6 +789,7 @@ async function enterApp() {
   DOM.missionContainer.style.display = 'block';
   state.today = formatDate(new Date());
   await ensureCoupleData();
+  renderVocabulary();
   subscribeToCoupleData();
   await fetchMission();
   renderSharedResponses();
@@ -731,6 +825,9 @@ async function init() {
   DOM.helpButton.addEventListener('click', sendHelpNote);
   DOM.languageToggle.addEventListener('click', switchLanguage);
   DOM.backButton.addEventListener('click', returnToHome);
+  if (DOM.vocabularyForm) {
+    DOM.vocabularyForm.addEventListener('submit', addVocabularyEntry);
+  }
   await restoreSession();
 }
 
